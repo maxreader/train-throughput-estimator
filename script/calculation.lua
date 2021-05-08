@@ -14,6 +14,8 @@ local function time_to_clear(arg)
 
     local air_resistance = 0.0075
 
+    -- train_speed = (acceleration * resistance) / (1 - resistance)
+
     local D = 0
     local V = 0
     local t = 0
@@ -34,10 +36,10 @@ local function calculate_throughput(train_data)
     local t = time_to_clear(train_data)
     local type_counts = train_data.type_counts
     local WPM = (type_counts["cargo-wagon"] + type_counts["fluid-wagon"]) * (3600 / t)
-    local CPM = train_data.item_capacity * 3600 / t
+    local ISPM = train_data.item_capacity * 3600 / t
     local FPM = train_data.fluid_capacity * 3600 / t
     local maxKMH = train_data.maxSpeed * 60 * 3600 / 1000
-    return {WPM = WPM, CPM = CPM, FPM = FPM, maxKMH = maxKMH}
+    return {WPM = WPM, ISPM = ISPM, FPM = FPM, maxKMH = maxKMH}
 end
 
 local function calculate_train_data(prototype_count)

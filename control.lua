@@ -71,7 +71,7 @@ end
 
 gui.hook_events(function(e)
     local msg = gui.read_action(e)
-    if msg then if msg.gui == "selection" then tte_gui.handle_action(e, msg) end end
+    if msg then if msg.gui == "tte-gui" then tte_gui.handle_action(e, msg) end end
 end)
 
 local on_gui_location_changed = function(event)
@@ -88,7 +88,12 @@ end
 event.on_gui_location_changed(on_gui_location_changed)
 
 local function refresh_gui(player, player_data)
-    -- TODO
+    if player_data and player_data.gui then
+        tte_gui.destroy(player_data)
+    else
+        player_data = {gui = {}}
+    end
+    tte_gui.build_gui(player, player_data)
 end
 
 event.register("tte-get-selection-tool", function(e)
@@ -104,12 +109,16 @@ end)
 event.on_player_selected_area(function(e)
     if e.item == "tte-selection-tool" then
         add_train_data(e.entities)
-        -- if GUI not open and setting to automatically open
+        local i = e.player_index
+        local player = game.get_player(i)
+        local player_data = global.players[i]
+        tte_gui.build_gui(player, player_data)
+        tte_gui.open(player, player_data)
+        tte_gui.update(player_data)
         --[[for k, v in pairs(global.train_data) do
             log_table(k)
-            log_table(v)
+            log_table(v.WPM)
         end]]
-        tte_gui.build_gui(game.get_player(e.player_index))
     end
 end)
 
@@ -118,13 +127,20 @@ event.on_configuration_changed(function(e)
     generate_rolling_stock_data()
     -- Recalculate cache of train throughput data
     regenerate_train_data()
-    refresh_gui()
+    for i, player in pairs(game.players) do
+        local player_table = global.players[i]
+        refresh_gui(player, player_table)
+    end
 end)
 
 event.on_init(function()
     generate_rolling_stock_data()
     global.train_data = {}
     global.players = {}
+    for i, player in pairs(game.players) do
+        global.players[i] = {}
+        refresh_gui(player, global.players[i])
+    end
 end)
 
 local function clear_cache()
