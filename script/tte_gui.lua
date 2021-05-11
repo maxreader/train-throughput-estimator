@@ -3,6 +3,7 @@ local gui = require("__flib__.gui-beta")
 local tte_gui = {}
 
 function tte_gui.build_gui(player, player_data)
+    if not player_data.gui then player_data.gui = {} end
     local rows = 10
     local refs = gui.build(player.gui.screen, {
         {
@@ -145,6 +146,11 @@ function tte_gui.update(player_data)
 
     local i = 0
     for consist, data in pairs(global.train_data) do
+        local consist_string = ""
+        for k, v in pairs(consist) do
+            consist_string = consist_string .. tostring(v) .. "-[item=" .. k .. "]"
+        end
+
         i = i + 1
         local frame = children[i]
         if not frame then
@@ -152,6 +158,7 @@ function tte_gui.update(player_data)
                 {
                     type = "frame",
                     style = "tte_rates_list_box_row_frame",
+                    ref = {consist_string},
                     children = {
                         {
                             type = "label",
@@ -187,13 +194,9 @@ function tte_gui.update(player_data)
                 }
 
             })
-            frame = scroll_pane.children[i]
         end
 
-        local consist_string = ""
-        for k, v in pairs(consist) do
-            consist_string = consist_string .. tostring(v) .. "-[item=" .. k .. "]"
-        end
+        frame = scroll_pane.children[i]
 
         gui.update(frame, ({
             children = {
@@ -203,12 +206,13 @@ function tte_gui.update(player_data)
             }
         }))
     end
+    children = scroll_pane.children
     for j = i + 1, #children do children[j].destroy() end
 end
 
 function tte_gui.destroy(player_table)
     player_table.gui.refs.window.destroy()
-    player_table.gui.tte_gui = nil
+    player_table.gui = nil
 end
 
 function tte_gui.open(player, player_table)

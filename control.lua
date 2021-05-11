@@ -88,11 +88,7 @@ end
 event.on_gui_location_changed(on_gui_location_changed)
 
 local function refresh_gui(player, player_data)
-    if player_data and player_data.gui then
-        tte_gui.destroy(player_data)
-    else
-        player_data = {gui = {}}
-    end
+    if player_data and player_data.gui then tte_gui.destroy(player_data) end
     tte_gui.build_gui(player, player_data)
 end
 
@@ -112,15 +108,25 @@ event.on_player_selected_area(function(e)
         local i = e.player_index
         local player = game.get_player(i)
         local player_data = global.players[i]
-        tte_gui.build_gui(player, player_data)
-        tte_gui.open(player, player_data)
         tte_gui.update(player_data)
+        tte_gui.open(player, player_data)
         --[[for k, v in pairs(global.train_data) do
             log_table(k)
             log_table(v.WPM)
         end]]
     end
 end)
+
+local function init_player(i)
+    local player = game.get_player(i)
+    global.players[i] = {}
+    refresh_gui(player, global.players[i])
+
+end
+
+event.on_player_created(function(e) init_player(e.player_index) end)
+
+event.on_player_removed(function(e) global.players[e.player_index] = nil end)
 
 event.on_configuration_changed(function(e)
     -- Generate table of relevant data for each rolling stock
@@ -137,10 +143,7 @@ event.on_init(function()
     generate_rolling_stock_data()
     global.train_data = {}
     global.players = {}
-    for i, player in pairs(game.players) do
-        global.players[i] = {}
-        refresh_gui(player, global.players[i])
-    end
+    for i, player in pairs(game.players) do init_player(i) end
 end)
 
 local function clear_cache()
