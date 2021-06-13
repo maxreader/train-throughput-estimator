@@ -1,72 +1,66 @@
 local event = require("__flib__.event")
 local gui = require("__flib__.gui-beta")
 local tte_gui = require("script.tte_gui")
-local calculate_train_data = require("script.calculation")
+local calculate_train_data = require("script.simulation")
+local data_functions = require("script.data_functions")
 
 local function log_table(tab)
-    game.print(serpent.block(tab, {comment = true, refcomment = true, tablecomment = false}))
+    game.print(serpent.line(tab, {comment = true, refcomment = true, tablecomment = false}))
 end
 
-local function regenerate_train_data()
+local function consist_sort_function(a, b)
     local train_data = global.train_data
-    local rolling_stock_data = global.rolling_stock_data
-    for prototype_count, _ in pairs(train_data) do
-        -- Verify that all constituent rolling stock are still valid
-        for prototype, count in pairs(prototype_count) do
-            if not rolling_stock_data[prototype] then
-                train_data[prototype_count] = nil
-                goto zcontinue
-            end
-        end
-        -- Recalculate data for configurations
-        train_data[prototype_count] = calculate_train_data(prototype_count)
-        ::zcontinue::
+    local a_length = train_data[a].constants.length
+    local b_length = train_data[b].constants.length
+    if a_length ~= b_length then
+        return a_length < b_length
+    else
+        return a < b
     end
-end
-
-local function give_tool(player)
-    if player.clear_cursor() then
-        player.cursor_stack.set_stack {name = "tte-selection-tool", count = 1}
-    end
-end
-
-local function generate_rolling_stock_data()
-    global.rolling_stock_data = nil
-    local rolling_stock_data = {}
-    local rolling_stocks = game.get_filtered_entity_prototypes {{filter = "rolling-stock"}}
-    for k, v in pairs(rolling_stocks) do
-        rolling_stock_data[k] = {
-            weight = v.weight or nil,
-            friction_force = v.friction_force or nil,
-            braking_force = v.braking_force or nil,
-            power = v.max_energy_usage,
-            max_speed = v.speed or nil,
-            type = v.type,
-            item_capacity = (v.type == "cargo-wagon" and
-                v.get_inventory_size(defines.inventory.cargo_wagon)) or 0,
-            fluid_capacity = (v.type == "fluid-wagon" and v.fluid_capacity) or 0
-        }
-    end
-    global.rolling_stock_data = rolling_stock_data
 end
 
 local function add_train_data(entities)
     local RSD = global.rolling_stock_data
-    if not RSD then generate_rolling_stock_data() end
-    -- Two selection modes: only rolling stock selected, vs select entire train of selected
+    -- TODO: Two selection modes: only rolling stock selected, vs select entire train of selected
     -- Going with only selected rolling stock
-    local prototype_count = {}
+    local unsorted_prototype_count = {}
+    local types = {
+        ["locomotive"] = {},
+        ["cargo-wagon"] = {},
+        ["fluid-wagon"] = {},
+        ["artillery-wagon"] = {}
+    }
     for k, v in pairs(entities) do
-        local name = v.name
-        local n = prototype_count[name] or 0
-        if RSD[v.type] then prototype_count[name] = n + 1 end
+        if RSD[v.name] then
+            local name = v.name
+            table.insert(types[v.type], name)
+            local n = unsorted_prototype_count[name] or 0
+            unsorted_prototype_count[name] = n + 1
+        end
     end
-
-    if not global.train_data then global.train_data = {} end
-    local train_data = global.train_data
-    if not train_data[prototype_count] then
-        train_data[prototype_count] = calculate_train_data(prototype_count)
+    if next(unsorted_prototype_count) then
+        local sorted_prototype_count = {}
+        for _type, names in pairs(types) do
+            table.sort(names)
+            for _, name in pairs(names) do
+                sorted_prototype_count[name] = unsorted_prototype_count[name]
+            end
+        end
+        -- Create consist string to use as ID and display
+        local consist_id = ""
+        for k, v in pairs(sorted_prototype_count) do
+            consist_id = consist_id .. tostring(v) .. "-[item=" .. k .. "] "
+        end
+        local train_data = global.train_data
+        local consist_ids = global.consist_ids
+        if not train_data[consist_id] then
+            train_data[consist_id] = calculate_train_data(sorted_prototype_count, consist_id)
+            consist_ids[#consist_ids + 1] = consist_id
+        end
+        table.sort(consist_ids, consist_sort_function)
+        return true
     end
+    return false
 end
 
 gui.hook_events(function(e)
@@ -92,6 +86,12 @@ local function refresh_gui(player, player_data)
     tte_gui.build_gui(player, player_data)
 end
 
+local function give_tool(player)
+    if player.clear_cursor() then
+        player.cursor_stack.set_stack {name = "tte-selection-tool", count = 1}
+    end
+end
+
 event.register("tte-get-selection-tool", function(e)
     local player = game.get_player(e.player_index)
     -- local player_table = global.players[e.player_index]
@@ -104,16 +104,13 @@ end)
 
 event.on_player_selected_area(function(e)
     if e.item == "tte-selection-tool" then
-        add_train_data(e.entities)
-        local i = e.player_index
-        local player = game.get_player(i)
-        local player_data = global.players[i]
-        tte_gui.update(player_data)
-        tte_gui.open(player, player_data)
-        --[[for k, v in pairs(global.train_data) do
-            log_table(k)
-            log_table(v.WPM)
-        end]]
+        if add_train_data(e.entities) then
+            local i = e.player_index
+            local player = game.get_player(i)
+            local player_data = global.players[i]
+            tte_gui.refresh_consists(player_data)
+            tte_gui.open(player, player_data)
+        end
     end
 end)
 
@@ -128,11 +125,19 @@ event.on_player_created(function(e) init_player(e.player_index) end)
 
 event.on_player_removed(function(e) global.players[e.player_index] = nil end)
 
+event.on_nth_tick(7, function(e)
+    local player_to_update = next(global.players_to_update, nil)
+    if player_to_update then tte_gui.update(global.players[player_to_update]) end
+end)
+
 event.on_configuration_changed(function(e)
     -- Generate table of relevant data for each rolling stock
-    generate_rolling_stock_data()
+    -- TODO: add check to only recalc if things have actually changed
+    data_functions.generate_rolling_stock_data()
+    data_functions.generate_fuel_data()
     -- Recalculate cache of train throughput data
-    regenerate_train_data()
+    data_functions.regenerate_train_data()
+    -- TODO: add purge of unused sim data
     for i, player in pairs(game.players) do
         local player_table = global.players[i]
         refresh_gui(player, player_table)
@@ -140,15 +145,20 @@ event.on_configuration_changed(function(e)
 end)
 
 event.on_init(function()
-    generate_rolling_stock_data()
+    data_functions.generate_rolling_stock_data()
+    data_functions.generate_fuel_data()
     global.train_data = {}
     global.players = {}
+    global.sim_data = {}
+    global.players_to_update = {}
+    global.consist_ids = {}
     for i, player in pairs(game.players) do init_player(i) end
 end)
 
 local function clear_cache()
-    generate_rolling_stock_data()
-    global.train_data = {}
+    data_functions.generate_rolling_stock_data()
+    data_functions.generate_fuel_data()
+    data_functions.regenerate_train_data()
 end
 
 commands.add_command("clearTTECache", "", clear_cache)
