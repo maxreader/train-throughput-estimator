@@ -4,8 +4,8 @@ local min = math.min
 local max = math.max
 
 -- TODO: Stop assuming fixed air resistance
-
--- Make this a mod setting
+-- TODO: Make this a mod setting
+-- jk it's complicated
 local maximum_junction_length = 128 -- tiles
 
 local function do_simulation(power, friction, weight, air_resistance, V_cap, length)
@@ -102,7 +102,10 @@ local function calculate_train_data(prototype_count, consist_id)
     }
     local item_capacity = 0
     local fluid_capacity = 0
-    local tooltip_string = {"", {"tte-gui.rolling-stock"}, ": "}
+    local tooltip_string = {
+        "", "[img=tooltip-category-train][font=heading-2][color=#FFD249]",
+        {"tte-gui.rolling-stock"}, ":[/color][/font]"
+    }
     local i = 1
     for k, v in pairs(prototype_count) do
         local thisData = prototype_data[k]
@@ -115,9 +118,15 @@ local function calculate_train_data(prototype_count, consist_id)
         item_capacity = item_capacity + v * thisData.item_capacity
         fluid_capacity = fluid_capacity + v * thisData.fluid_capacity
         type_counts[thisData.type] = type_counts[thisData.type] + v
-        tooltip_string = {"", tooltip_string, "\n\t", thisData.name, ": ", tostring(v)}
+        tooltip_string = {
+            "", tooltip_string, "\n\t[font=default-bold][color=255,230,192]", thisData.name,
+            ":[/color][/font] ", tostring(v)
+        }
     end
-
+    tooltip_string = {
+        "", tooltip_string, "\n[img=tooltip-category-vehicle][font=heading-2][color=#FFD249]",
+        {"tte-gui.properties"}, "[/color][/font]"
+    }
     -- Combine all that relevant data into a tooltip
     -- TODO: Maybe add total item stack/fluid count
 
@@ -131,10 +140,12 @@ local function calculate_train_data(prototype_count, consist_id)
         ["braking_force"] = {braking_force * 60 * 1000, false, "W"}
     }
 
-    -- TODO: format numbers
     for k, v in pairs(locale_lookup) do
         local number = format_number(v[1], v[2], true)
-        tooltip_string = {"", tooltip_string, "\n", {"tte-gui." .. k}, ": ", number, v[3]}
+        tooltip_string = {
+            "", tooltip_string, "\n\t[font=default-bold][color=255,230,192]", {"tte-gui." .. k},
+            ":[/color][/font] ", number, v[3]
+        }
     end
 
     local train_constants = {

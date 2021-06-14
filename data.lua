@@ -8,8 +8,8 @@ for k, v in pairs(color) do alt_color[k] = 255 - v end
 local rollingStockTypes = {"locomotive", "cargo-wagon", "fluid-wagon", "artillery-wagon"}
 
 data:extend{
-    {type = "custom-input", name = "toggle-tte-data-gui", key_sequence = "ALT + T"},
-    {type = "custom-input", name = "tte-get-selection-tool", key_sequence = "CTRL + SHIFT + T"}, {
+    {type = "custom-input", name = "toggle-tte-data-gui", key_sequence = "SHIFT + T"},
+    {type = "custom-input", name = "tte-get-selection-tool", key_sequence = "ALT + T"}, {
         type = "selection-tool",
         name = "tte-selection-tool",
         localised_name = {"item-name.tte-selection-tool"},
@@ -30,6 +30,46 @@ data:extend{
         flags = {"hidden", "only-in-cursor", "not-stackable"},
         draw_label_for_cursor_render = true,
         entity_type_filters = rollingStockTypes
+    }, {
+        name = "tte_shortcut",
+        type = "shortcut",
+        toggleable = false,
+        action = "lua",
+        associated_control_input = "tte-get-selection-tool",
+        icon = {
+            filename = "__train-throughput-estimator__/graphics/tte-selection-tool.png",
+            priority = "extra-high-no-scale",
+            size = 32,
+            scale = 1,
+            tint = {0, 0, 0},
+            flags = {"icon"}
+        },
+        disabled_icon = {
+            filename = "__train-throughput-estimator__/graphics/tte-selection-tool.png",
+            priority = "extra-high-no-scale",
+            size = 32,
+            scale = 1,
+            tint = {0, 0, 0},
+            flags = {"icon"}
+        },
+        small_icon = {
+            filename = "__train-throughput-estimator__/graphics/tte-selection-tool.png",
+            priority = "extra-high-no-scale",
+            size = 16,
+            x = 32,
+            scale = 1,
+            tint = {0, 0, 0},
+            flags = {"icon"}
+        },
+        disabled_small_icon = {
+            filename = "__train-throughput-estimator__/graphics/tte-selection-tool.png",
+            priority = "extra-high-no-scale",
+            size = 16,
+            x = 32,
+            scale = 1,
+            tint = {0, 0, 0},
+            flags = {"icon"}
+        }
     }, {
         type = "sprite",
         name = "tte-up-arrow",
@@ -66,6 +106,13 @@ styles.tte_fuel_choose_elem_button = {
     parent = "slot_button",
     height = 30,
     width = 30
+}
+
+styles.tte_arrow_button_style = {
+    type = "button_style",
+    parent = "frame_action_button",
+    height = 12,
+    width = 12
 }
 
 styles.tte_toolbar_frame = {

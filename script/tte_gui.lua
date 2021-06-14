@@ -5,9 +5,8 @@ local calculate_bd_and_st = data_functions.calculate_bd_and_st
 local format = require("util.format")
 local format_number = format.format_number
 
+-- TODO: have braking force field reset to default if left empty
 local tte_gui = {}
-
--- TODO: add braking force research adjustment
 
 local time_intervals = {
     {multiplier = 60, localised_name = {"tte-gui.per_second"}, name = "per_second"},
@@ -38,7 +37,7 @@ local function convert_period_to_throughput(train_constants, period, time_interv
         item_stacks = train_constants.item_capacity / period
     }
 end
-local widths = {24, 128, 70, 105, 130, 60, 80, 80}
+local widths = {24, 128, 70, 105, 130, 60, 80, 80, 24}
 function tte_gui.build_gui(player, player_data)
     if not player_data.gui then player_data.gui = {} end
     local rows = 10
@@ -205,19 +204,19 @@ function tte_gui.build_gui(player, player_data)
                                                 }, {
                                                     type = "scroll-pane",
                                                     style = "tte_consist_list_box_scroll_pane",
-                                                    style_mods = {height = (rows - 3) * 45},
+                                                    style_mods = {height = (rows --[[- 3)]] ) * 45},
                                                     horizontal_scroll_policy = "never",
                                                     ref = {"consist_scroll_pane"}
                                                 }
                                             }
-                                        },
+                                        } --[[
                                         {
                                             type = "frame",
                                             style_mods = {
                                                 horizontally_stretchable = true,
                                                 vertically_stretchable = true
                                             }
-                                        }
+                                        }]]
                                     }
                                 }, {
                                     type = "frame",
@@ -317,15 +316,13 @@ local arrows = {
     children = {
         {
             type = "sprite-button",
-            style = "frame_action_button",
-            style_mods = {width = 12, height = 12},
+            style = "tte_arrow_button_style",
             sprite = "tte-up-arrow",
             hovered_sprite = "tte-up-arrow-hover",
             actions = {on_click = {gui = "tte-gui", action = "move_consist_up"}}
         }, {
             type = "sprite-button",
-            style = "frame_action_button",
-            style_mods = {width = 12, height = 12},
+            style = "tte_arrow_button_style",
             sprite = "tte-down-arrow",
             hovered_sprite = "tte-down-arrow-hover",
             actions = {on_click = {gui = "tte-gui", action = "move_consist_down"}}
@@ -383,7 +380,6 @@ function tte_gui.update(player_data)
 
     local junction_size = state.selected_junction_size or 32
 
-    -- TODO: Only iterate over selected player consists
     local selected_consists = state.selected_consists
     local i = 0
     for _, consist_string in pairs(selected_consists) do
@@ -492,6 +488,30 @@ function tte_gui.open(player, player_table)
     gui_data.refs.window.visible = true
 
     if not gui_data.state.pinned then player.opened = gui_data.refs.window end
+end
+
+function tte_gui.close(player, player_table)
+    local gui_data = player_table.gui
+    local refs = gui_data.refs
+    local state = gui_data.state
+    if not state.pinning then
+        -- de-focus the dropdowns if they were focused
+        refs.window.focus()
+
+        state.visible = false
+        refs.window.visible = false
+
+        if player.opened == refs.window then player.opened = nil end
+    end
+end
+
+function tte_gui.toggle(player, player_table)
+    local opened = player_table.gui.state.visible
+    if opened then
+        tte_gui.close(player, player_table)
+    else
+        tte_gui.open(player, player_table)
+    end
 end
 
 function tte_gui.handle_action(e, msg)

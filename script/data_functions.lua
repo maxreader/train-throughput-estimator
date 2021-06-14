@@ -95,8 +95,6 @@ function data_functions.generate_fuel_data()
     global.fuel_data = fuel_data
 end
 
--- TODO: braking force drop down
--- Replaced with textfield
 function data_functions.get_braking_force_research()
     -- global.braking_force_multipliers
     local braking_force_techs = {}

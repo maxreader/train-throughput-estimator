@@ -19,24 +19,22 @@ local function consist_sort_function(a, b)
     end
 end
 
-local function add_train_data(entities)
+local function sort_and_calculate(entities)
+
     local RSD = global.rolling_stock_data
-    -- TODO: Two selection modes: only rolling stock selected, vs select entire train of selected
-    -- Going with only selected rolling stock
-    local unsorted_prototype_count = {}
     local types = {
         ["locomotive"] = {},
         ["cargo-wagon"] = {},
         ["fluid-wagon"] = {},
         ["artillery-wagon"] = {}
     }
+
+    local unsorted_prototype_count = {}
     for k, v in pairs(entities) do
-        if RSD[v.name] then
-            local name = v.name
-            table.insert(types[v.type], name)
-            local n = unsorted_prototype_count[name] or 0
-            unsorted_prototype_count[name] = n + 1
-        end
+        local name = v.name
+        table.insert(types[v.type], name)
+        local n = unsorted_prototype_count[name] or 0
+        unsorted_prototype_count[name] = n + 1
     end
     if next(unsorted_prototype_count) then
         local sorted_prototype_count = {}
@@ -61,6 +59,33 @@ local function add_train_data(entities)
         return true
     end
     return false
+end
+
+local function add_train_data(entities, selection_mode)
+    local RSD = global.rolling_stock_data
+    -- TODO: Two selection modes: only rolling stock selected, vs select entire train of selected
+    -- Going with only selected rolling stock
+
+    -- Either mode needs to produce a list of unsorted prototype counts
+    if selection_mode == "Entities" then
+        local only_carriages = {}
+        local i = 1
+        for k, v in pairs(entities) do if RSD[v.name] then only_carriages[i] = v end end
+        sort_and_calculate(only_carriages)
+    elseif selection_mode == "Trains" then
+        local LuaTrains = {}
+        for k, v in pairs(entities) do
+            if RSD[v.name] then
+                local train = v.train
+                local train_id = train.id
+                if not LuaTrains[train_id] then
+                    sort_and_calculate(train.carriages)
+                    LuaTrains[train_id] = true
+                end
+            end
+        end
+    end
+
 end
 
 gui.hook_events(function(e)
@@ -94,17 +119,34 @@ end
 
 event.register("tte-get-selection-tool", function(e)
     local player = game.get_player(e.player_index)
-    -- local player_table = global.players[e.player_index]
     give_tool(player)
 end)
 
+event.register("toggle-tte-data-gui", function(e)
+    local i = e.player_index
+    local player = game.get_player(i)
+    local player_data = global.players[i]
+    local player_gui = player_data.gui
+    if not player_gui then
+        tte_gui.build_gui(player, player_data)
+    else
+        tte_gui.toggle(player, player_data)
+    end
+end)
+
 event.on_player_alt_selected_area(function(e)
-    if e.item == "tte-selection-tool" then add_train_data(e.entities) end
+    if e.item == "tte-selection-tool" then
+        local selection_mode = settings.get_player_settings(e.player_index)["tte-selection-mode"]
+                                   .value
+        add_train_data(e.entities, selection_mode)
+    end
 end)
 
 event.on_player_selected_area(function(e)
     if e.item == "tte-selection-tool" then
-        if add_train_data(e.entities) then
+        local selection_mode = settings.get_player_settings(e.player_index)["tte-selection-mode"]
+                                   .value
+        if add_train_data(e.entities, selection_mode) then
             local i = e.player_index
             local player = game.get_player(i)
             local player_data = global.players[i]
@@ -132,12 +174,10 @@ end)
 
 event.on_configuration_changed(function(e)
     -- Generate table of relevant data for each rolling stock
-    -- TODO: add check to only recalc if things have actually changed
     data_functions.generate_rolling_stock_data()
     data_functions.generate_fuel_data()
     -- Recalculate cache of train throughput data
     data_functions.regenerate_train_data()
-    -- TODO: add purge of unused sim data
     for i, player in pairs(game.players) do
         local player_table = global.players[i]
         refresh_gui(player, player_table)
@@ -162,12 +202,3 @@ local function clear_cache()
 end
 
 commands.add_command("clearTTECache", "", clear_cache)
-
--- TODO: add shortcut
---[[event.on_lua_shortcut(function(e)
-  if e.prototype_name == "rcalc-get-selection-tool" then
-    local player = game.get_player(e.player_index)
-    local player_table = global.players[e.player_index]
-    give_tool(player, player_table, player_table.last_tool_measure)
-  end
-end)]]
