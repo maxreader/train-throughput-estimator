@@ -5,7 +5,6 @@ local calculate_bd_and_st = data_functions.calculate_bd_and_st
 local format = require("util.format")
 local format_number = format.format_number
 
--- TODO: have braking force field reset to default if left empty
 local tte_gui = {}
 
 local time_intervals = {
@@ -13,21 +12,6 @@ local time_intervals = {
     {multiplier = 3600, localised_name = {"tte-gui.per_minute"}, name = "per_minute"},
     {multiplier = 21600, localised_name = {"tte-gui.per_hour"}, name = "per_hour"}
 }
-
---[[
-    columns: train consist, max speed, braking distance, saturated throughput
-    WPM, ISPM, FPM
-]]
-
-local function column_label(caption, width, align)
-    return {
-        type = "label",
-        style = "tte_column_label",
-        caption = caption,
-        style_mods = {width = width or nil, horizontal_align = align or "center"}
-    }
-
-end
 
 local function convert_period_to_throughput(train_constants, period, time_interval_index)
     period = period / time_interval_index
@@ -37,11 +21,96 @@ local function convert_period_to_throughput(train_constants, period, time_interv
         item_stacks = train_constants.item_capacity / period
     }
 end
-local widths = {24, 128, 70, 105, 130, 60, 80, 80, 24}
+
+local columns
+
+local arrows = {
+    type = "flow",
+    direction = "vertical",
+    style_mods = {width = 24},
+    children = {
+        {
+            type = "sprite-button",
+            style = "tte_arrow_button_style",
+            sprite = "tte-up-arrow",
+            hovered_sprite = "tte-up-arrow-hover",
+            actions = {on_click = {gui = "tte-gui", action = "move_consist_up"}}
+        }, {
+            type = "sprite-button",
+            style = "tte_arrow_button_style",
+            sprite = "tte-down-arrow",
+            hovered_sprite = "tte-down-arrow-hover",
+            actions = {on_click = {gui = "tte-gui", action = "move_consist_down"}}
+        }
+    }
+}
+
+local trash_button = {
+    type = "sprite-button",
+    style = "frame_action_button",
+    sprite = 'utility/trash_white',
+    actions = {on_click = {gui = "tte-gui", action = "remove_consist_from_rates"}}
+}
+
+local function column_label(caption, width, align, tooltip)
+    return {
+        type = "label",
+        style = "tte_column_label",
+        caption = caption,
+        tooltip = tooltip,
+        style_mods = {width = width or nil, horizontal_align = align or "center"}
+    }
+end
+
+columns = {
+    {caption = {""}, width = 24, button = arrows}, {
+        caption = {"tte-gui.train-consist"},
+        width = 128,
+        align = "left",
+        tooltip = {"tte-gui.train-consist-tooltip"}
+    }, {caption = {"tte-gui.max-speed"}, width = 70, tooltip = {"tte-gui.max-speed-tooltip"}}, {
+        caption = {"tte-gui.braking-distance"},
+        width = 105,
+        tooltip = {"tte-gui.braking-distance-tooltip"}
+    },
+    {
+        caption = {"tte-gui.sat-throughput"},
+        width = 130,
+        tooltip = {"tte-gui.sat-throughput-tooltip"}
+    }, {caption = {"tte-gui.wpm"}, width = 60, tooltip = {"tte-gui.wpm-tooltip"}},
+    {caption = {"tte-gui.ispm"}, width = 80, tooltip = {"tte-gui.ispm-tooltip"}},
+    {caption = {"tte-gui.fpm"}, width = 80, tooltip = {"tte-gui.fpm-tooltip"}},
+    {
+        caption = {"tte-gui.refuel-interval"},
+        width = 105,
+        tooltip = {"tte-gui.refuel-interval-tooltip"}
+    }, {caption = {""}, width = 24, button = trash_button}
+}
+
+local column_labels = table.map(columns, function(v)
+    return column_label(v.caption, v.width, v.align, v.tooltip)
+end)
+local empty_row_frame_children = table.map(columns, function(v)
+    if v.button then
+        return v.button
+    else
+        return {
+            type = "label",
+            style = "tte_amount_label",
+            style_mods = {width = v.width, horizontal_align = v.align}
+        }
+    end
+end)
+local empty_row_frame = {
+    type = "frame",
+    style = "tte_rates_list_box_row_frame",
+    style_mods = {top_padding = 4},
+    children = empty_row_frame_children
+}
+
 function tte_gui.build_gui(player, player_data)
     if not player_data.gui then player_data.gui = {} end
     local rows = 10
-
     local braking_force_bonus = player.force.train_braking_force_bonus * 100
 
     local titlebar_flow = {
@@ -74,9 +143,23 @@ function tte_gui.build_gui(player, player_data)
         type = "frame",
         style = "tte_toolbar_frame",
         children = {
-            {type = "empty-widget", style = "flib_horizontal_pusher"},
+            {type = "empty-widget", style = "flib_horizontal_pusher"}, {
+                type = "label",
+                style = "caption_label",
+                caption = {"tte-gui.directionality"},
+                tooltip = {"tte-gui.directionality-tooltip"}
+            }, {
+                type = "drop-down",
+                ref = {"directionality_dropdown"},
+                actions = {
+                    on_selection_state_changed = {gui = "tte-gui", action = "update_directionality"}
+                },
+                items = {{"tte-gui.monodirectional"}, {"tte-gui.bidirectional"}},
+                selected_index = 1
+            }, {type = "empty-widget", style = "tte_horizontal_spacer"},
             {type = "label", style = "caption_label", caption = {"tte-gui.braking-force-bonus"}}, {
                 type = "textfield",
+                style = "tte_junction_size_textfield",
                 style_mods = {width = 80},
                 numeric = true,
                 -- allow_decimal = true,
@@ -91,7 +174,8 @@ function tte_gui.build_gui(player, player_data)
                         action = "update_braking_force_bonus_textfield"
                     }
                 }
-            }, {type = "label", style = "caption_label", caption = {"tte-gui.fuel-label"}}, {
+            }, {type = "empty-widget", style = "tte_horizontal_spacer"},
+            {type = "label", style = "caption_label", caption = {"tte-gui.fuel-label"}}, {
                 type = "choose-elem-button",
                 style = "tte_fuel_choose_elem_button",
                 style_mods = {right_margin = -8},
@@ -102,7 +186,8 @@ function tte_gui.build_gui(player, player_data)
                 },
                 ref = {"fuel_button"},
                 actions = {on_elem_changed = {gui = "tte-gui", action = "update_fuel_button"}}
-            }, {type = "label", style = "caption_label", caption = {"tte-gui.time-interval"}}, {
+            }, {type = "empty-widget", style = "tte_horizontal_spacer"},
+            {type = "label", style = "caption_label", caption = {"tte-gui.time-interval"}}, {
                 type = "drop-down",
                 ref = {"time_interval_dropdown"},
                 actions = {
@@ -227,17 +312,7 @@ function tte_gui.build_gui(player, player_data)
                                             type = "frame",
                                             style = "tte_toolbar_frame",
                                             style_mods = {right_padding = 20},
-                                            children = {
-                                                column_label({""}, widths[1]),
-                                                column_label({"tte-gui.train-consist"}, widths[2]),
-                                                column_label({"tte-gui.max-speed"}, widths[3]),
-                                                column_label({"tte-gui.braking-distance"}, widths[4]),
-                                                column_label({"tte-gui.sat-throughput"}, widths[5]),
-                                                column_label({"tte-gui.wpm"}, widths[6]),
-                                                column_label({"tte-gui.ispm"}, widths[7]),
-                                                column_label({"tte-gui.fpm"}, widths[8]),
-                                                column_label({""}, widths[9])
-                                            }
+                                            children = column_labels
                                         }, {
                                             type = "scroll-pane",
                                             style = "tte_rates_list_box_scroll_pane",
@@ -270,7 +345,8 @@ function tte_gui.build_gui(player, player_data)
             update_junction_size = false,
             braking_force_bonus = braking_force_bonus,
             selected_consists = {},
-            inverted_selected_consists = {}
+            inverted_selected_consists = {},
+            directionality = 1
         }
     }
 end
@@ -309,34 +385,6 @@ function tte_gui.refresh_consists(player_data)
     end
 end
 
-local arrows = {
-    type = "flow",
-    direction = "vertical",
-    style_mods = {width = widths[1]},
-    children = {
-        {
-            type = "sprite-button",
-            style = "tte_arrow_button_style",
-            sprite = "tte-up-arrow",
-            hovered_sprite = "tte-up-arrow-hover",
-            actions = {on_click = {gui = "tte-gui", action = "move_consist_up"}}
-        }, {
-            type = "sprite-button",
-            style = "tte_arrow_button_style",
-            sprite = "tte-down-arrow",
-            hovered_sprite = "tte-down-arrow-hover",
-            actions = {on_click = {gui = "tte-gui", action = "move_consist_down"}}
-        }
-    }
-}
-
-local trash_button = {
-    type = "sprite-button",
-    style = "frame_action_button",
-    sprite = 'utility/trash_white',
-    actions = {on_click = {gui = "tte-gui", action = "remove_consist_from_rates"}}
-}
-
 local function update_row_frame(frame, data_to_display, tooltip, format)
     local frame_update = {}
     for k, value in pairs(data_to_display) do
@@ -350,6 +398,7 @@ local function update_row_frame(frame, data_to_display, tooltip, format)
     gui.update(frame, {children = frame_update})
 end
 
+local huge = math.huge
 function tte_gui.update(player_data)
     local refs = player_data.gui.refs
     local data_scroll_pane = refs.data_scroll_pane
@@ -367,15 +416,16 @@ function tte_gui.update(player_data)
         gui.update(junction_size_slider, {elem_mods = {slider_value = new_value}})
         gui.update(junction_size_textfield, {elem_mods = {text = tostring(new_value)}})
     end
-    tte_gui.refresh_consists(player_data)
 
     -- Get fuel type and grab correct data for that fuel
     local selected_fuel = state.selected_fuel or "null_fuel"
     local selected_fuel_data = global.fuel_data[selected_fuel]
     local multiplier_id = selected_fuel_data.multiplier_id
-    local fuel_value = selected_fuel_data.fuel_value
+    local fuel_value_per_stack = selected_fuel_data.fuel_value_per_stack or huge -- J/tick-stacks
 
-    -- TODO: check this
+    -- Get directionality
+    local directionality = state.directionality or 1
+
     local time_interval_index = state.time_interval_index
 
     local junction_size = state.selected_junction_size or 32
@@ -384,66 +434,23 @@ function tte_gui.update(player_data)
     local i = 0
     for _, consist_string in pairs(selected_consists) do
         i = i + 1
+        local frame = children[i]
+        if not frame then
+            gui.build(data_scroll_pane, {empty_row_frame})
+            frame = data_scroll_pane.children[i]
+        end
+
         local consist_data = train_data[consist_string]
         local train_constants = consist_data.constants
         local tooltip_string = train_constants.tooltip_string
 
-        local frame = children[i]
-        if not frame then
-            gui.build(data_scroll_pane, {
-                {
-                    type = "frame",
-                    style = "tte_rates_list_box_row_frame",
-                    style_mods = {top_padding = 4},
-                    children = {
-                        arrows, {
-                            type = "label",
-                            style = "tte_amount_label",
-                            style_mods = {width = widths[2], horizontal_align = "left"}
-                        },
-                        {
-                            type = "label",
-                            style = "tte_amount_label",
-                            style_mods = {width = widths[3]}
-                        },
-                        {
-                            type = "label",
-                            style = "tte_amount_label",
-                            style_mods = {width = widths[4]}
-                        },
-                        {
-                            type = "label",
-                            style = "tte_amount_label",
-                            style_mods = {width = widths[5]}
-                        },
-                        {
-                            type = "label",
-                            style = "tte_amount_label",
-                            style_mods = {width = widths[6]}
-                        },
-                        {
-                            type = "label",
-                            style = "tte_amount_label",
-                            style_mods = {width = widths[7]}
-                        },
-                        {
-                            type = "label",
-                            style = "tte_amount_label",
-                            style_mods = {width = widths[8]}
-                        }, trash_button
-                    }
-                }
-            })
-            frame = data_scroll_pane.children[i]
-        end
-
-        -- Get data for this row
-        local multiplier_data = consist_data[multiplier_id]
+        -- Get data for this fuel, then by directionality
+        local multiplier_data = consist_data[multiplier_id][directionality]
         local this_sim_data = sim_data[multiplier_data.sim_id]
 
         local tile = junction_size + train_constants.length
         local time = this_sim_data.times[tile]
-        local maxV = this_sim_data.maxV * 60 * 3.6
+        local maxV = this_sim_data.maxV * 60 * 3.6 -- convert from tiles/tick to km/h
 
         local time_multiplier = time_intervals[time_interval_index].multiplier
 
@@ -455,14 +462,19 @@ function tte_gui.update(player_data)
         local saturation_period = saturation_data.saturation_period
         local sat_throughput = convert_period_to_throughput(train_constants, saturation_period,
                                                             time_multiplier)
+        -- Time in ticks to refuel, possibly lump .min_fuel_slots/ .power into one table call
+        local refuel_interval = train_constants.min_fuel_slots * fuel_value_per_stack /
+                                    train_constants.power / 1000 / time_multiplier
+
+        -- Convert to minutes, tostring to avoid getting SI units tacked on in update function
+        -- refuel_interval = tostring(refuel_interval)
 
         local data_to_display = {
             "", consist_string, maxV, saturation_data.braking_distance, sat_throughput.wagons,
-            throughput.wagons, throughput.item_stacks, throughput.fluid, ""
+            throughput.wagons, throughput.item_stacks, throughput.fluid, refuel_interval, ""
         }
         update_row_frame(frame, data_to_display, tooltip_string, true)
 
-        -- Update slider if changed
     end
     for j = i + 1, #children do children[j].destroy() end
 end
@@ -486,6 +498,7 @@ function tte_gui.open(player, player_table)
     local gui_data = player_table.gui
     gui_data.state.visible = true
     gui_data.refs.window.visible = true
+    tte_gui.refresh_consists(player_table)
 
     if not gui_data.state.pinned then player.opened = gui_data.refs.window end
 end
@@ -530,20 +543,31 @@ function tte_gui.handle_action(e, msg)
         if not state.pinning then
             -- de-focus the dropdowns if they were focused
             refs.window.focus()
-
             state.visible = false
             refs.window.visible = false
-
             if player.opened == refs.window then player.opened = nil end
         end
+    elseif action == "update_directionality" then
+        local new_directionality = e.element.selected_index
+        local current_directionality = state.directionality
+        if new_directionality ~= current_directionality then
+            state.directionality = new_directionality
+            tte_gui.update(player_data)
+        end
     elseif action == "update_braking_force_bonus_textfield" then
+        -- Braking force changing means that only saturation data changes, but we're not updating elements within a row_frame (yet)
         local textfield = refs.braking_force_bonus_textfield
         local new_value = tonumber(textfield.text)
-        if new_value and new_value ~= state.braking_force_bonus then
-            state.braking_force_bonus = new_value
+        if not new_value then
+            local default = player.force.train_braking_force_bonus * 100
+            state.braking_force_bonus = default
+            textfield.text = default
+        elseif new_value ~= state.braking_force_bonus then
+            state.braking_force_bonus = new_value or player.force.train_braking_force_bonus * 100
             tte_gui.update(player_data)
         end
     elseif action == "update_fuel_button" then
+        -- Fuel changes everything but consists
         local this_fuel = e.element.elem_value
         local old_fuel = state.selected_fuel
         if this_fuel ~= old_fuel then
@@ -559,11 +583,9 @@ function tte_gui.handle_action(e, msg)
         end
     elseif action == "update_junction_size_slider" then
         local slider = refs.junction_size_slider
-        local textfield = refs.junction_size_textfield
         local new_value = slider.slider_value
         if new_value ~= state.junction_size then
             state.selected_junction_size = new_value
-            -- TODO: update junction size textfield to match slider
             state.update_junction_size = true
             table.insert(global.players_to_update, player_index)
         end

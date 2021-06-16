@@ -28,7 +28,7 @@ local round_number = format.round_number
 function format.format_number(num, precision, space)
     local magnitude = log10(num)
     local prefix_index = floor(magnitude / 3)
-    if not precision then precision = 1 end
+    if not precision then precision = 0 end
 
     space = (space and " ") or ""
 

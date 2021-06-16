@@ -4,11 +4,11 @@
 -- TODO: locale for setting and shortcut
 data:extend({
     --[[{type = "int-setting",
-name = "tte-max-junction-size",
-setting_type = "runtime-per-user",
-default_value = 128,
-minimum_value = 
-},]]
+        name = "tte-max-junction-size",
+        setting_type = "runtime-per-user",
+        default_value = 128,
+        minimum_value = 
+    },--]]
     {
         type = "string-setting",
         name = "tte-selection-mode",

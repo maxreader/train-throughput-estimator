@@ -1,110 +1,16 @@
 local event = require("__flib__.event")
 local gui = require("__flib__.gui-beta")
 local tte_gui = require("script.tte_gui")
-local calculate_train_data = require("script.simulation")
 local data_functions = require("script.data_functions")
 
 local function log_table(tab)
     game.print(serpent.line(tab, {comment = true, refcomment = true, tablecomment = false}))
 end
 
-local function consist_sort_function(a, b)
-    local train_data = global.train_data
-    local a_length = train_data[a].constants.length
-    local b_length = train_data[b].constants.length
-    if a_length ~= b_length then
-        return a_length < b_length
-    else
-        return a < b
-    end
-end
-
-local function sort_and_calculate(entities)
-
-    local RSD = global.rolling_stock_data
-    local types = {
-        ["locomotive"] = {},
-        ["cargo-wagon"] = {},
-        ["fluid-wagon"] = {},
-        ["artillery-wagon"] = {}
-    }
-
-    local unsorted_prototype_count = {}
-    for k, v in pairs(entities) do
-        local name = v.name
-        table.insert(types[v.type], name)
-        local n = unsorted_prototype_count[name] or 0
-        unsorted_prototype_count[name] = n + 1
-    end
-    if next(unsorted_prototype_count) then
-        local sorted_prototype_count = {}
-        for _type, names in pairs(types) do
-            table.sort(names)
-            for _, name in pairs(names) do
-                sorted_prototype_count[name] = unsorted_prototype_count[name]
-            end
-        end
-        -- Create consist string to use as ID and display
-        local consist_id = ""
-        for k, v in pairs(sorted_prototype_count) do
-            consist_id = consist_id .. tostring(v) .. "-[item=" .. k .. "] "
-        end
-        local train_data = global.train_data
-        local consist_ids = global.consist_ids
-        if not train_data[consist_id] then
-            train_data[consist_id] = calculate_train_data(sorted_prototype_count, consist_id)
-            consist_ids[#consist_ids + 1] = consist_id
-        end
-        table.sort(consist_ids, consist_sort_function)
-        return true
-    end
-    return false
-end
-
-local function add_train_data(entities, selection_mode)
-    local RSD = global.rolling_stock_data
-    -- TODO: Two selection modes: only rolling stock selected, vs select entire train of selected
-    -- Going with only selected rolling stock
-
-    -- Either mode needs to produce a list of unsorted prototype counts
-    if selection_mode == "Entities" then
-        local only_carriages = {}
-        local i = 1
-        for k, v in pairs(entities) do if RSD[v.name] then only_carriages[i] = v end end
-        sort_and_calculate(only_carriages)
-    elseif selection_mode == "Trains" then
-        local LuaTrains = {}
-        for k, v in pairs(entities) do
-            if RSD[v.name] then
-                local train = v.train
-                local train_id = train.id
-                if not LuaTrains[train_id] then
-                    sort_and_calculate(train.carriages)
-                    LuaTrains[train_id] = true
-                end
-            end
-        end
-    end
-
-end
-
 gui.hook_events(function(e)
     local msg = gui.read_action(e)
     if msg then if msg.gui == "tte-gui" then tte_gui.handle_action(e, msg) end end
 end)
-
-local on_gui_location_changed = function(event)
-    local element = event.element
-    if element.name == "tte-gui" then
-        local player_index = event.player_index
-        if not global.player_data[player_index] then
-            global.player_data[player_index] = {}
-            global.player_data[event.player_index].gui = {position = element.location}
-        end
-    end
-end
-
-event.on_gui_location_changed(on_gui_location_changed)
 
 local function refresh_gui(player, player_data)
     if player_data and player_data.gui then tte_gui.destroy(player_data) end
@@ -127,13 +33,18 @@ event.register("toggle-tte-data-gui", function(e)
     local player = game.get_player(i)
     local player_data = global.players[i]
     local player_gui = player_data.gui
-    if not player_gui then
-        tte_gui.build_gui(player, player_data)
-    else
-        tte_gui.toggle(player, player_data)
+    if not player_gui then tte_gui.build_gui(player, player_data) end
+    tte_gui.toggle(player, player_data)
+end)
+
+event.on_lua_shortcut(function(e)
+    if e.prototype_name == "tte_shortcut" then
+        local player = game.get_player(e.player_index)
+        give_tool(player)
     end
 end)
 
+local add_train_data = data_functions.add_train_data
 event.on_player_alt_selected_area(function(e)
     if e.item == "tte-selection-tool" then
         local selection_mode = settings.get_player_settings(e.player_index)["tte-selection-mode"]
@@ -150,7 +61,6 @@ event.on_player_selected_area(function(e)
             local i = e.player_index
             local player = game.get_player(i)
             local player_data = global.players[i]
-            tte_gui.refresh_consists(player_data)
             tte_gui.open(player, player_data)
         end
     end

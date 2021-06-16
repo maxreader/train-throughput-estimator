@@ -100,6 +100,11 @@ data:extend{
         flags = {"gui-icon"}
     }
 }
+styles.tte_horizontal_spacer = {
+    type = "empty_widget_style",
+    horizontally_squashable = "on",
+    maximal_width = 60
+}
 
 styles.tte_fuel_choose_elem_button = {
     type = "button_style",
@@ -223,3 +228,4 @@ styles.tte_junction_size_textfield = {
     horizontal_align = "center",
     width = 80
 }
+

@@ -3,7 +3,6 @@ local format_number = require("util.format").format_number
 local min = math.min
 local max = math.max
 
--- TODO: Stop assuming fixed air resistance
 -- TODO: Make this a mod setting
 -- jk it's complicated
 local maximum_junction_length = 128 -- tiles
@@ -42,15 +41,15 @@ local function do_simulation(power, friction, weight, air_resistance, V_cap, len
     return times, velocities
 end
 
-local function calculate_bottleneck_throughput(train_constants, multipliers)
+local function calculate_bottleneck_throughput(train_constants, multipliers, bidi)
     local weight = train_constants.weight
     local friction = train_constants.friction
     local acceleration_multiplier = multipliers.acceleration
-    local power = train_constants.power * acceleration_multiplier
+    local power = train_constants.power * acceleration_multiplier * ((bidi and 0.5) or 1)
     local length = train_constants.length
     local consist_id = train_constants.consist_id
 
-    local air_resistance = 0.0075 * 1000
+    local air_resistance = (train_constants.air_resistance or 0.0075) * 1000
 
     local min_V = power / weight * (1 - air_resistance / weight)
     local V_cap = train_constants.maxSpeed * multipliers.top_speed
@@ -94,6 +93,8 @@ local function calculate_train_data(prototype_count, consist_id)
     local braking_force = 0
     local power = 0
     local maxSpeed = math.huge
+    local min_fuel_slots = math.huge
+    local min_air_resistance = math.huge
     local type_counts = {
         ["locomotive"] = 0,
         ["cargo-wagon"] = 0,
@@ -117,6 +118,9 @@ local function calculate_train_data(prototype_count, consist_id)
         maxSpeed = min(maxSpeed, thisData.max_speed or maxSpeed)
         item_capacity = item_capacity + v * thisData.item_capacity
         fluid_capacity = fluid_capacity + v * thisData.fluid_capacity
+        local fuel_slots = thisData.fuel_slots
+        if fuel_slots then min_fuel_slots = min(min_fuel_slots, thisData.fuel_slots) end
+        min_air_resistance = min(min_air_resistance, thisData.air_resistance)
         type_counts[thisData.type] = type_counts[thisData.type] + v
         tooltip_string = {
             "", tooltip_string, "\n\t[font=default-bold][color=255,230,192]", thisData.name,
@@ -128,20 +132,24 @@ local function calculate_train_data(prototype_count, consist_id)
         {"tte-gui.properties"}, "[/color][/font]"
     }
     -- Combine all that relevant data into a tooltip
-    -- TODO: Maybe add total item stack/fluid count
-
-    power = power / 1000
-
     local locale_lookup = {
-        ["length"] = {(length + 1) / 7, 0},
-        ["weight"] = {weight * 1000, false, "N"},
-        ["power"] = {power * 60 * 1000, false, "W"},
-        ["friction"] = {friction * 60 * 1000, false, "W"},
-        ["braking_force"] = {braking_force * 60 * 1000, false, "W"}
+        ["length"] = {(length + 1) / 7, 0, "", true},
+        ["weight"] = {weight * 1000, false, "N", true},
+        ["power"] = {power * 60, false, "W", true},
+        ["friction"] = {friction * 60 * 1000, false, "W", true},
+        ["braking_force"] = {braking_force * 60 * 1000, false, "W", true}
     }
-
+    if item_capacity > 0 then
+        locale_lookup["item_capacity"] = {item_capacity, 1, {"", " ", {"tte-gui.stacks"}}, false}
+    end
+    if fluid_capacity > 0 then
+        locale_lookup["fluid_capacity"] = {
+            fluid_capacity, 1, {"", " ", {"tte-gui.fluid_units"}}, false
+        }
+    end
+    power = power / 1000
     for k, v in pairs(locale_lookup) do
-        local number = format_number(v[1], v[2], true)
+        local number = format_number(v[1], v[2], v[4])
         tooltip_string = {
             "", tooltip_string, "\n\t[font=default-bold][color=255,230,192]", {"tte-gui." .. k},
             ":[/color][/font] ", number, v[3]
@@ -162,12 +170,18 @@ local function calculate_train_data(prototype_count, consist_id)
         maxSpeed = maxSpeed,
         item_capacity = item_capacity,
         fluid_capacity = fluid_capacity,
+        min_fuel_slots = min_fuel_slots,
+        air_resistance = min_air_resistance,
         type_counts = type_counts
     }
     local train_data = {constants = train_constants}
     for k, multipliers in pairs(global.fuel_multipliers) do
-        local sim_id, maxV = calculate_bottleneck_throughput(train_constants, multipliers)
-        train_data[k] = {sim_id = sim_id, maxV = maxV}
+        local sim_id_mono, maxV_mono = calculate_bottleneck_throughput(train_constants, multipliers)
+        local sim_id_bidi, maxV_bidi = calculate_bottleneck_throughput(train_constants, multipliers,
+                                                                       true)
+        train_data[k] = {
+            {sim_id = sim_id_mono, maxV = maxV_mono}, {sim_id = sim_id_bidi, maxV = maxV_bidi}
+        }
     end
     return train_data
 end
