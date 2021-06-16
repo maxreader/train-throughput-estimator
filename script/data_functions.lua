@@ -194,7 +194,7 @@ function data_functions.add_train_data(entities, selection_mode)
                 i = i + 1
             end
         end
-        sort_and_calculate(only_carriages)
+        return sort_and_calculate(only_carriages)
     elseif selection_mode == "Trains" then
         local LuaTrains = {}
         for k, v in pairs(entities) do
@@ -202,13 +202,13 @@ function data_functions.add_train_data(entities, selection_mode)
                 local train = v.train
                 local train_id = train.id
                 if not LuaTrains[train_id] then
-                    sort_and_calculate(train.carriages)
                     LuaTrains[train_id] = true
+                    return sort_and_calculate(train.carriages)
                 end
             end
         end
     end
-
+    return false
 end
 
 return data_functions
